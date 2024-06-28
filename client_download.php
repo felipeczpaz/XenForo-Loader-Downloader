@@ -1,18 +1,29 @@
 <?php
 
-// Check if the request method is POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header("HTTP/1.0 405 Method Not Allowed");
-    echo "Only POST requests are allowed";
-    exit;
+define('FILE_PATH', 'path_to_your_loader_exe.exe');
+
+function checkRequestMethod() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        exit(json_encode([
+            'status' => 405,
+            'error' => 'method_not_allowed',
+            'message' => 'Method not allowed.'
+        ]));
+    }
 }
 
-// Ensure PHP version is at least 7.0.0
-if (version_compare(PHP_VERSION, '7.0.0', '<')) {
-    die("PHP 7.0.0 or newer is required. You are running PHP " . PHP_VERSION . ". Please ask your host to upgrade PHP.");
+function checkPhpVersion() {
+    if (version_compare(PHP_VERSION, '7.0.0', '<')) {
+        http_response_code(500);
+        exit(json_encode([
+            'status' => 500,
+            'error' => 'php_version_requirement_not_met',
+            'message' => 'PHP version requirement not met.'
+        ]));
+    }
 }
 
-// Function to generate a random name
 function generateRandomName($length = 10) {
     $characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     $randomName = '';
@@ -25,44 +36,33 @@ function generateRandomName($length = 10) {
     return $randomName;
 }
 
-// Function to handle file download
 function downloadClient() {
-    $filePath = 'path_to_your_loader_exe.exe';
-
-    if (file_exists($filePath)) {
-        $randomFileName = generateRandomName() . '.exe';
-
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $randomFileName . '"');
-        header('Content-Length: ' . filesize($filePath));
-
-        readfile($filePath);
-    } else {
-        echo "File not found.";
+    if (!file_exists(FILE_PATH)) {
+        http_response_code(404);
+        exit(json_encode(['error' => 'file_not_found', 'message' => 'File not found.']));
     }
+
+    $randomFileName = generateRandomName() . '.exe';
+
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . $randomFileName . '"');
+    header('Content-Length: ' . filesize(FILE_PATH));
+
+    readfile(FILE_PATH);
 }
 
-// Function to check user permissions for downloading
-function doesUserHavePermissionToDownload($user) {
-    $allowedGroupIds = [3, 4, 5]; // Moderator, Admin, Customer group IDs
+function isUserBanned($userData) {
+    return !empty($userData['is_banned']);
+}
 
-    if (!$user['user_id'] || $user['is_banned']) {
-        return false;
-    }
+function isUserCustomer($user) {
+    $customerGroupId = 5;
 
-    if (in_array($user['user_group_id'], $allowedGroupIds)) {
+    if ($user['user_group_id'] === $customerGroupId) {
         return true;
     }
 
-    if (in_array(5, $user->secondary_group_ids)) {
-        return true;
-    }
-
-    if ($user['is_moderator'] || $user['is_admin'] || $user['is_super_admin']) {
-        return true;
-    }
-
-    return false;
+    return in_array($customerGroupId, $user['secondary_group_ids']);
 }
 
 require __DIR__ . '/src/XF.php';
@@ -73,10 +73,12 @@ $app->start();
 
 $user = \XF::visitor();
 
-if (doesUserHavePermissionToDownload($user)) {
+if (isUserCustomer($user)) {
     downloadClient();
-} else {
-    header('HTTP/1.1 403 Forbidden');
-    echo 'You are not allowed to download this Cheat.';
+    return;
 }
+
+http_response_code(403);
+echo json_encode(['error' => 'forbidden', 'message' => 'You do not have permission to download this cheat.']);
+
 ?>
