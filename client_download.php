@@ -65,6 +65,9 @@ function isUserCustomer($user) {
     return in_array($customerGroupId, $user['secondary_group_ids']);
 }
 
+checkRequestMethod();
+checkPhpVersion();
+
 require __DIR__ . '/src/XF.php';
 
 XF::start(__DIR__);
